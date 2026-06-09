@@ -1,4 +1,4 @@
-VERSION = "1.3.0"
+VERSION = "0.1.0"
 
 local micro = import("micro")
 local shell = import("micro/shell")
@@ -7,67 +7,56 @@ local config = import("micro/config")
 local util = import("micro/util")
 local utf = import("unicode/utf8")
 
-config.RegisterCommonOption("aspell", "check", "auto")
-config.RegisterCommonOption("aspell", "lang", "")
-config.RegisterCommonOption("aspell", "dict", "")
-config.RegisterCommonOption("aspell", "sugmode", "normal")
-config.RegisterCommonOption("aspell", "args", "")
+config.RegisterCommonOption("hunspell", "check", "auto")
+config.RegisterCommonOption("hunspell", "dict", "")
+config.RegisterCommonOption("hunspell", "args", "")
 
 function init()
     config.MakeCommand("addpersonal", addpersonal, config.NoComplete)
     config.MakeCommand("acceptsug", acceptsug, config.NoComplete)
     config.MakeCommand("togglecheck", togglecheck, config.NoComplete)
-    config.AddRuntimeFile("aspell", config.RTHelp, "help/aspell.md")
+    config.AddRuntimeFile("hunspell", config.RTHelp, "help/hunspell.md")
 end
 
 local filterModes = {
-    xml = "sgml",
-    ["c++"] = "ccpp",
-    c = "ccpp",
-    html = "html",
-    html4 = "html",
-    html5 = "html",
-    perl = "perl",
-    perl6 = "perl",
-    tex = "tex",
-    markdown = "markdown",
-    groff = "nroff",
-    man = "nroff",
-    ["git-commit"] = "url",
-    mail = "email"
-    -- Aspell has comment mode, in which only lines starting with # are checked
-    -- but it doesn't work for some reason
+    xml = "-H",
+    html = "-H",
+    html4 = "-H",
+    html5 = "-H",
+    tex = "-t",
+    groff = "-n",
+    man = "-n"
 }
 
 local lock = false
 local next = nil
 
-function runAspell(buf, onExit, ...)
-    local options = {"pipe", "--encoding=utf-8"}
+function runHunspell(buf, onExit, ...)
+    -- "-a" enables Ispell compatibility mode. "-i utf-8" sets encoding.
+    local options = {"-a", "-i", "utf-8"}
+    
     if filterModes[buf:FileType()] then
-        options[#options + 1] = "--mode=" .. filterModes[buf:FileType()]
+        options[#options + 1] = filterModes[buf:FileType()]
     end
-    if buf.Settings["aspell.lang"] ~= "" then
-        options[#options + 1] = "--lang=" .. buf.Settings["aspell.lang"]
+    
+    -- Hunspell uses -d for dictionaries (e.g., -d en_US)
+    if buf.Settings["hunspell.dict"] ~= "" then
+        options[#options + 1] = "-d"
+        options[#options + 1] = buf.Settings["hunspell.dict"]
     end
-    if buf.Settings["aspell.dict"] ~= "" then
-        options[#options + 1] = "--master=" .. buf.Settings["aspell.dict"]
-    end
-    if buf.Settings["aspell.sugmode"] ~= "" then
-        options[#options + 1] = "--sug-mode=" .. buf.Settings["aspell.sugmode"]
-    end
-    for _, argument in ipairs(split(buf.Settings["aspell.args"], " ")) do
+    
+    for _, argument in ipairs(split(buf.Settings["hunspell.args"], " ")) do
         options[#options + 1] = argument
     end
 
-    local job = shell.JobSpawn("aspell", options, nil,
+    local job = shell.JobSpawn("hunspell", options, nil,
             nil, onExit, buf, unpack(arg))
-    -- Enable terse mode
+            
+    -- Enable terse mode (outputs only misspellings)
     shell.JobSend(job, "!\n")
     for i=0, buf:LinesNum() - 1 do
         local line = util.String(buf:LineBytes(i))
-        -- Escape for aspell (it interprets lines that start
-        -- with % @ ^ ! etc.)
+        -- Escape lines starting with special characters
         line = "^" .. line .. "\n"
 
         shell.JobSend(job, line)
@@ -76,32 +65,32 @@ function runAspell(buf, onExit, ...)
 end
 
 function spellcheck(buf)
-    local check = buf.Settings["aspell.check"]
+    local check = buf.Settings["hunspell.check"]
     local readcheck = buf.Type.Readonly
     if (check == "on" or (check == "auto" and filterModes[buf:FileType()])) and (not readcheck) then
         if lock then
             next = buf
         else
             lock = true
-            runAspell(buf, highlight)
+            runHunspell(buf, highlight)
         end
     else
         -- If we aren't supposed to spellcheck, clear the messages
-        buf:ClearMessages("aspell")
+        buf:ClearMessages("hunspell")
     end
 end
 
--- Parses the output of Aspell and returns the list of all misspells.
+-- Parses the output of Hunspell and returns the list of all misspells.
 function parseOutput(out)
     local patterns = {"^# (.-) (%d+)$", "^& (.-) %d+ (%d+): (.+)$"}
 
     if out:find("command not found") then
         micro.InfoBar():Error(
-                "Make sure that Aspell is installed and available in your PATH")
+                "Make sure that Hunspell is installed and available in your PATH")
         return {}
-    elseif not out:find("International Ispell Version") then
-        -- Something went wrong, we'll show what Aspell has to say
-        micro.InfoBar():Error("Aspell: " .. out)
+    elseif not (out:find("Ispell Version") or out:find("Hunspell")) then
+        -- Something went wrong, we'll show what Hunspell has to say
+        micro.InfoBar():Error("Hunspell: " .. out)
         return {}
     end
 
@@ -136,12 +125,12 @@ end
 function highlight(out, args)
     local buf = args[1]
 
-    buf:ClearMessages("aspell")
+    buf:ClearMessages("hunspell")
 
     -- This is a hack that keeps the text shifted two columns to the right
     -- even when no gutter messages are shown
-    local msg = "This message shouldn't be visible (Aspell plugin)"
-    local bmsg = buffer.NewMessageAtLine("aspell", msg, 0, buffer.MTError)
+    local msg = "This message shouldn't be visible (Hunspell plugin)"
+    local bmsg = buffer.NewMessageAtLine("hunspell", msg, 0, buffer.MTError)
     buf:AddMessage(bmsg)
 
     for _, misspell in ipairs(parseOutput(out)) do
@@ -151,7 +140,7 @@ function highlight(out, args)
         else
             msg = misspell.word .. " ->X"
         end
-        local bmsg = buffer.NewMessage("aspell", msg, misspell.mstart,
+        local bmsg = buffer.NewMessage("hunspell", msg, misspell.mstart,
                 misspell.mend, buffer.MTWarning)
         buf:AddMessage(bmsg)
     end
@@ -174,7 +163,7 @@ function parseMessages(messages)
 
     for i=1, #messages do
         local message = messages[i]
-        if message.Owner == "aspell" then
+        if message.Owner == "hunspell" then
             for _, pattern in ipairs(patterns) do
                 if string.find(message.Msg, pattern) then
                     local word, suggestions = string.match(message.Msg, pattern)
@@ -195,11 +184,11 @@ end
 
 function togglecheck(bp, args)
 	local buf = bp.Buf
-	local check = buf.Settings["aspell.check"]
+	local check = buf.Settings["hunspell.check"]
     if check == "on" or (check == "auto" and filterModes[buf:FileType()]) then
-		buf.Settings["aspell.check"] = "off"
+		buf.Settings["hunspell.check"] = "off"
 	else
-		buf.Settings["aspell.check"] = "on"
+		buf.Settings["hunspell.check"] = "on"
 	end
 	spellcheck(buf)
 	if args then
@@ -217,20 +206,20 @@ function addpersonal(bp, args)
         local wordInBuf = util.String(buf:Substr(misspell.mstart, misspell.mend))
         if loc:GreaterEqual(misspell.mstart) and loc:LessEqual(misspell.mend)
                 and wordInBuf == misspell.word then
-            local options = {"pipe", "--encoding=utf-8"}
-            if buf.Settings["aspell.lang"] ~= "" then
-                options[#options + 1] = "--lang=" .. buf.Settings["aspell.lang"]
+            local options = {"-a", "-i", "utf-8"}
+            if buf.Settings["hunspell.dict"] ~= "" then
+                options[#options + 1] = "-d"
+                options[#options + 1] = buf.Settings["hunspell.dict"]
             end
-            if buf.Settings["aspell.dict"] ~= "" then
-                options[#options + 1] = "--master=" .. buf.Settings["aspell.dict"]
-            end
-            for _, argument in ipairs(split(buf.Settings["aspell.args"], " ")) do
+            for _, argument in ipairs(split(buf.Settings["hunspell.args"], " ")) do
                 options[#options + 1] = argument
             end
 
-            local job = shell.JobSpawn("aspell", options, nil, nil, function ()
+            local job = shell.JobSpawn("hunspell", options, nil, nil, function ()
                 spellcheck(buf)
             end)
+            
+            -- '*' adds word to personal dictionary, '#' saves the dictionary
             shell.JobSend(job, "*" .. misspell.word .. "\n#\n")
             job.Stdin:Close()
 
