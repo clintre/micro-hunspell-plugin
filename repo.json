@@ -1,8 +1,9 @@
 [{
   "Name": "hunspell",
   "Description": "Spellchecking with Hunspell",
-  "Tags": ["spellchecking", "spelling", "aspell", "spellchecker"],
+  "Tags": ["spellchecking", "spelling", "hunspell", "spellchecker"],
   "Website": "https://github.com/clintre/micro-hunspell-plugin",
+  "License": "MIT",
   "Versions": [
     {
       "Version": "0.1.0",
