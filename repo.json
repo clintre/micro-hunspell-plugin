@@ -5,10 +5,10 @@
   "Website": "https://github.com/clintre/micro-hunspell-plugin",
   "Versions": [
     {
-      "Version": "0.3.0",
+      "Version": "0.1.0",
       "Url": "https://github.com/clintre/micro-hunspell-plugin/archive/v0.1.0.zip",
       "Require": {
-        "micro": ">=2.0.15"
+        "micro": ">=2.0.0"
       }
     }
   ]
