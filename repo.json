@@ -1,5 +1,5 @@
 [{
-  "Name": "aspell",
+  "Name": "hunspell",
   "Description": "Spellchecking with Hunspell",
   "Tags": ["spellchecking", "spelling", "aspell", "spellchecker"],
   "Website": "https://github.com/clintre/micro-hunspell-plugin",
