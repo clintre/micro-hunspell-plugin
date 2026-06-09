@@ -8,4 +8,4 @@ For help see [the help file](help/hunspell.md).
 git clone https://github.com/clintre/micro-hunspell-plugin ~/.config/micro/plug/hunspell
 ```
 
-Forked from [Micro Aspell Plugin](https://github.com/priner/micro-aspell-plugin)
+Based [Micro Aspell Plugin](https://github.com/priner/micro-aspell-plugin)
